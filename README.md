@@ -4,6 +4,7 @@ Cloud Infrastructure as Code using Terraform
 # Usage
 First Download or Clone this repo to your local system  
 After this,  
+To Initiate Terraform WorkSpace       :- terraform init  
 To create infrastructure, run command :- terraform apply -auto-approve  
 To delete infrastructure, run command :- terraform destroy -auto-approve  
 
