@@ -56,75 +56,6 @@ resource "aws_security_group" "web-SG" {
   }
 }
 
-
-//Launching EC2 Instance
-resource "aws_instance" "web" {
-  ami             = "${var.ami_id}"
-  instance_type   = "${var.ami_type}"
-  key_name        = "${aws_key_pair.generated_key.key_name}"
-  security_groups = ["${aws_security_group.web-SG.name}","default"]
-
-  //Labelling the Instance
-  tags = {
-    Name = "Web-Env"
-    env  = "Production"
-  }
-/*
-  provisioner "file" {
-    connection {
-      agent       = false
-      type        = "ssh"
-      user        = "ec2-user"
-      private_key = "${tls_private_key.tls_key.private_key_pem}"
-      host        = "${aws_instance.web.public_ip}"
-    }
-
-    source      = "web-srvr-config.sh"
-    destination = "/tmp/partition.sh" 
-  }*/
-
-
-  //Executing Some Commands in Instance Over SSH
-  provisioner "remote-exec" {
-    connection {
-      agent       = "false"
-      type        = "ssh"
-      user        = "ec2-user"
-      private_key = "${tls_private_key.tls_key.private_key_pem}"
-      host        = "${aws_instance.web.public_ip}"
-    }
-
-    inline = [
-      "sudo yum install httpd -y",
-      "sudo systemctl start httpd",
-      "sudo systemctl enable httpd"
-    ]
-
-  }
-
-  //Storing Key and IP in Local Files
-  provisioner "local-exec" {
-    command = "echo ${aws_instance.web.public_ip} > public-ip.txt"
-  }
-}
-
-//Creating EBS Volume
-resource "aws_ebs_volume" "web-vol" {
-  availability_zone = "${aws_instance.web.availability_zone}"
-  size              = 1
-  
-  tags = {
-    Name = "ebs-vol"
-  }
-}
-
-//Attaching EBS Volume to a Instance
-resource "aws_volume_attachment" "ebs_att" {
-  device_name = "/dev/sdh"
-  volume_id   = "${aws_ebs_volume.web-vol.id}"
-  instance_id = "${aws_instance.web.id}"
-}
-
 //Creating a S3 Bucket
 resource "aws_s3_bucket" "web-bucket" {
   bucket = "web-static-data-bucket"
@@ -132,10 +63,26 @@ resource "aws_s3_bucket" "web-bucket" {
 }
 
 //Putting Objects in S3 Bucket
-resource "aws_s3_bucket_object" "web-object" {
+resource "aws_s3_bucket_object" "web-object1" {
   bucket = "${aws_s3_bucket.web-bucket.bucket}"
-  key    = "vimalsir.jpg"
-  source = "vimal.jpg"
+  key    = "ias1.png"
+  source = "ias1.png"
+  acl    = "public-read"
+}
+
+//Putting Objects in S3 Bucket
+resource "aws_s3_bucket_object" "web-object2" {
+  bucket = "${aws_s3_bucket.web-bucket.bucket}"
+  key    = "ias2.png"
+  source = "ias2.png"
+  acl    = "public-read"
+}
+
+//Putting Objects in S3 Bucket
+resource "aws_s3_bucket_object" "web-object3" {
+  bucket = "${aws_s3_bucket.web-bucket.bucket}"
+  key    = "ias3.png"
+  source = "ias3.png"
   acl    = "public-read"
 }
 
@@ -183,5 +130,90 @@ resource "aws_cloudfront_distribution" "s3-web-distribution" {
 
   viewer_certificate {
     cloudfront_default_certificate = true
+  }
+}
+
+//Launching EC2 Instance
+resource "aws_instance" "web" {
+  ami             = "${var.ami_id}"
+  instance_type   = "${var.ami_type}"
+  key_name        = "${aws_key_pair.generated_key.key_name}"
+  security_groups = ["${aws_security_group.web-SG.name}","default"]
+
+  //Labelling the Instance
+  tags = {
+    Name = "Web-Env"
+    env  = "Production"
+  }
+
+  //Put CloudFront URLs in our Website Code
+  provisioner "local-exec" {
+    command = "sed -i 's/CF_URL_Here/${aws_cloudfront_distribution.s3-web-distribution.domain_name}/g' webapp.html"
+  }
+  
+  //Copy our Wesite Code i.e. HTML File in Instance Webserver Document Rule
+  provisioner "file" {
+    connection {
+      agent       = false
+      type        = "ssh"
+      user        = "ec2-user"
+      private_key = "${tls_private_key.tls_key.private_key_pem}"
+      host        = "${aws_instance.web.public_ip}"
+    }
+
+    source      = "webapp.html"
+    destination = "/home/ec2-user/webapp.html" 
+  }
+
+
+  //Executing Commands to initiate WebServer in Instance Over SSH 
+  provisioner "remote-exec" {
+    connection {
+      agent       = "false"
+      type        = "ssh"
+      user        = "ec2-user"
+      private_key = "${tls_private_key.tls_key.private_key_pem}"
+      host        = "${aws_instance.web.public_ip}"
+    }
+    
+    inline = [
+      "sudo yum install httpd -y",
+      "sudo systemctl start httpd",
+      "sudo systemctl enable httpd",
+      "sudo cp /home/ec2-user/webapp.html /var/www/html/"
+    ]
+
+  }
+
+  //Storing Key and IP in Local Files
+  provisioner "local-exec" {
+    command = "echo ${aws_instance.web.public_ip} > public-ip.txt"
+  }
+}
+
+//Creating EBS Volume
+resource "aws_ebs_volume" "web-vol" {
+  availability_zone = "${aws_instance.web.availability_zone}"
+  size              = 1
+  
+  tags = {
+    Name = "ebs-vol"
+  }
+}
+
+//Attaching EBS Volume to a Instance
+resource "aws_volume_attachment" "ebs_att" {
+  device_name = "/dev/sdh"
+  volume_id   = "${aws_ebs_volume.web-vol.id}"
+  instance_id = "${aws_instance.web.id}"
+}
+
+//Creating EBS Snapshot
+resource "aws_ebs_snapshot" "ebs_snapshot" {
+  volume_id   = "${aws_ebs_volume.web-vol.id}"
+  description = "Snapshot of our EBS volume"
+  
+  tags = {
+    env = "Production"
   }
 }
