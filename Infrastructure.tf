@@ -163,7 +163,7 @@ resource "aws_instance" "web" {
     command = "sed -i 's/CF_URL_Here/${aws_cloudfront_distribution.s3-web-distribution.domain_name}/g' webapp.html"
   }
   
-  //Copy our Wesite Code i.e. HTML File in Instance Webserver Document Rule
+  //Copy our Wesite Code i.e. HTML File in Instance
   provisioner "file" {
     connection {
       agent       = false
@@ -223,7 +223,8 @@ resource "aws_volume_attachment" "ebs_att" {
   volume_id    = "${aws_ebs_volume.web-vol.id}"
   instance_id  = "${aws_instance.web.id}"
   force_detach = true
-
+  
+  //Format and Mount EBS Volume then Copy our WebSite Code in Webserver Document Root
   provisioner "remote-exec" {
     connection {
       agent       = "false"
