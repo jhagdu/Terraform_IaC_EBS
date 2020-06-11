@@ -25,12 +25,20 @@ resource "tls_private_key" "tls_key" {
 resource "aws_key_pair" "generated_key" {
   key_name   = "web-env-key"
   public_key = "${tls_private_key.tls_key.public_key_openssh}"
+
+  depends_on = [
+    tls_private_key.tls_key
+  ]
 }
 
 //Saving Private Key PEM File
 resource "local_file" "key-file" {
-    content  = "${tls_private_key.tls_key.private_key_pem}"
-    filename = "web-env-key.pem"
+  content  = "${tls_private_key.tls_key.private_key_pem}"
+  filename = "web-env-key.pem"
+
+  depends_on = [
+    tls_private_key.tls_key
+  ]
 }
 
 //Creating Security Group
@@ -131,6 +139,10 @@ resource "aws_cloudfront_distribution" "s3-web-distribution" {
   viewer_certificate {
     cloudfront_default_certificate = true
   }
+
+  depends_on = [
+    aws_s3_bucket.web-bucket
+  ]
 }
 
 //Launching EC2 Instance
@@ -180,7 +192,6 @@ resource "aws_instance" "web" {
       "sudo yum install httpd -y",
       "sudo systemctl start httpd",
       "sudo systemctl enable httpd",
-      "sudo cp /home/ec2-user/webapp.html /var/www/html/"
     ]
 
   }
@@ -189,6 +200,11 @@ resource "aws_instance" "web" {
   provisioner "local-exec" {
     command = "echo ${aws_instance.web.public_ip} > public-ip.txt"
   }
+
+  depends_on = [
+    aws_security_group.web-SG,
+    aws_key_pair.generated_key
+  ]
 }
 
 //Creating EBS Volume
@@ -203,9 +219,31 @@ resource "aws_ebs_volume" "web-vol" {
 
 //Attaching EBS Volume to a Instance
 resource "aws_volume_attachment" "ebs_att" {
-  device_name = "/dev/sdh"
-  volume_id   = "${aws_ebs_volume.web-vol.id}"
-  instance_id = "${aws_instance.web.id}"
+  device_name  = "/dev/sdh"
+  volume_id    = "${aws_ebs_volume.web-vol.id}"
+  instance_id  = "${aws_instance.web.id}"
+  force_detach = true
+
+  provisioner "remote-exec" {
+    connection {
+      agent       = "false"
+      type        = "ssh"
+      user        = "ec2-user"
+      private_key = "${tls_private_key.tls_key.private_key_pem}"
+      host        = "${aws_instance.web.public_ip}"
+    }
+    
+    inline = [
+      "sudo mkfs.ext4 /dev/xvdh",
+      "sudo mount /dev/xvdh /var/www/html/",
+      "sudo cp /home/ec2-user/webapp.html /var/www/html/"
+    ]
+  }
+
+  depends_on = [
+    aws_instance.web,
+    aws_ebs_volume.web-vol
+  ]
 }
 
 //Creating EBS Snapshot
@@ -216,4 +254,8 @@ resource "aws_ebs_snapshot" "ebs_snapshot" {
   tags = {
     env = "Production"
   }
+
+  depends_on = [
+    aws_volume_attachment.ebs_att
+  ]
 }
