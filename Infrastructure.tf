@@ -259,4 +259,4 @@ resource "aws_ebs_snapshot" "ebs_snapshot" {
   depends_on = [
     aws_volume_attachment.ebs_att
   ]
-}
+} 
