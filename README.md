@@ -1,4 +1,4 @@
-# Terraform_IaC
+# Terraform_IaC_EBS
 Cloud Infrastructure as Code using Terraform 
 
 # Usage
